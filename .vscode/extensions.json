@@ -1,0 +1,15 @@
+{
+    "recommendations": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-toolsai.jupyter",
+        "tamasfe.even-better-toml",
+        "github.copilot",
+        "ms-vscode.vscode-json",
+        "yzhang.markdown-all-in-one",
+        "github.vscode-github-actions",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker"
+    ]
+}
