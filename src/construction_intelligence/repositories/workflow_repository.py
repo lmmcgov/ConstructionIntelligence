@@ -5,5 +5,3 @@ from .base import Repository
 
 class WorkflowRepository(Repository[Workflow]):
     """Repository for Workflow objects."""
-
-    pass

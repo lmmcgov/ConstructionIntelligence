@@ -5,5 +5,3 @@ from .base import Repository
 
 class EventRepository(Repository[Event]):
     """Repository for Event objects."""
-
-    pass

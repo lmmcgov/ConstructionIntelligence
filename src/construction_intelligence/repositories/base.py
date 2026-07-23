@@ -1,31 +1,71 @@
+"""
+Abstract repository interface.
+
+Concrete implementations may store objects in memory, SQLite,
+PostgreSQL, or any other persistence mechanism.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
+ID = TypeVar("ID")
 
 
-class Repository(Generic[T]):
-    """Simple in-memory repository."""
+class Repository(ABC, Generic[T, ID]):
+    """Abstract base class for repositories."""
 
-    def __init__(self):
-        self._items: dict = {}
+    @abstractmethod
+    def add(
+        self,
+        item: T,
+    ) -> None:
+        """Persist a new item."""
 
-    def add(self, item: T) -> None:
-        self._items[item.id] = item
+    @abstractmethod
+    def update(
+        self,
+        item: T,
+    ) -> None:
+        """Persist changes to an existing item."""
 
-    def get(self, item_id):
-        return self._items.get(item_id)
+    @abstractmethod
+    def get(
+        self,
+        item_id: ID,
+    ) -> T | None:
+        """Retrieve an item by its identifier."""
 
-    def list(self) -> list[T]:
-        return list(self._items.values())
+    @abstractmethod
+    def list(
+        self,
+    ) -> list[T]:
+        """Return all stored items."""
 
-    def remove(self, item_id) -> None:
-        self._items.pop(item_id, None)
+    @abstractmethod
+    def remove(
+        self,
+        item_id: ID,
+    ) -> None:
+        """Delete an item."""
 
-    def exists(self, item_id) -> bool:
-        return item_id in self._items
+    @abstractmethod
+    def exists(
+        self,
+        item_id: ID,
+    ) -> bool:
+        """Return True if the item exists."""
 
-    def clear(self) -> None:
-        self._items.clear()
+    @abstractmethod
+    def clear(
+        self,
+    ) -> None:
+        """Remove all items."""
 
-    def __len__(self) -> int:
-        return len(self._items)
+    @abstractmethod
+    def count(
+        self,
+    ) -> int:
+        """Return the number of stored items."""
