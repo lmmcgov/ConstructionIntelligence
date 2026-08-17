@@ -26,6 +26,10 @@ watching, e.g.:
 
 from __future__ import annotations
 
+from construction_intelligence.ingestion.web.country_aliases import (
+    COUNTRY_ALIASES,
+)
+
 from construction_intelligence.ingestion.web.country_normalization import (
     normalize_country_name,
 )
@@ -79,17 +83,43 @@ class FeedRegistry:
         """
         Return feed sources registered for a country.
 
-        Returns an empty list for unregistered
-        countries. Unlike SearchContext, there is
-        no safe global fallback — a wrong feed is
-        worse than no feed.
+        Resolution order:
+
+        1. Exact normalized country
+        2. Alias lookup (COUNTRY_ALIASES)
+        3. Empty list
+
+        Unlike SearchContext, there is no global
+        fallback beyond alias resolution — a wrong
+        country's feed is worse than no feed.
         """
 
         country_key = normalize_country_name(
             country
         )
 
-        return self._feeds.get(
-            country_key,
-            [],
+        #
+        # Exact match
+        #
+        if country_key in self._feeds:
+
+            return self._feeds[
+                country_key
+            ]
+
+
+        #
+        # Alias match
+        #
+        alias = COUNTRY_ALIASES.get(
+            country_key
         )
+
+        if alias and alias in self._feeds:
+
+            return self._feeds[
+                alias
+            ]
+
+
+        return []

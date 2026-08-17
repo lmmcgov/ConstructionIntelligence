@@ -24,11 +24,15 @@ broad net; EvidenceRanker and the scoring services filter
 downstream, per this project's high-recall-then-high-precision
 design (see README.md).
 
-Country keys match plain English names as resolved by
-normalize_country_name (lowercase, accent-stripped) -- they do
-not go through SearchContextProvider's COUNTRY_ALIASES, so a
-Project.country value must match one of these keys (or a
-close ASCII-folded variant) to resolve any feeds.
+Countries are registered under their canonical English name.
+FeedRegistry.get_feeds() resolves a Project.country value against
+these keys via normalize_country_name (lowercase, accent-stripped)
+and then, on a miss, COUNTRY_ALIASES (shared with
+SearchContextProvider) -- e.g. "Bosnia" or "FYROM" both resolve
+to the "bosnia and herzegovina" / "north macedonia" entries below.
+A country with no exact or alias match still resolves to an empty
+list rather than a default -- there is no safe global fallback for
+feed URLs the way there is for search vocabulary.
 """
 
 from __future__ import annotations

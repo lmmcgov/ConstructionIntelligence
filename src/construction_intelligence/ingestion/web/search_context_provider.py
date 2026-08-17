@@ -14,6 +14,10 @@ Responsibilities:
 
 from __future__ import annotations
 
+from construction_intelligence.ingestion.web.country_aliases import (
+    COUNTRY_ALIASES,
+)
+
 from construction_intelligence.ingestion.web.country_normalization import (
     normalize_country_name,
 )
@@ -31,77 +35,6 @@ class SearchContextProvider:
     """
     Provides country-specific search contexts.
     """
-
-    COUNTRY_ALIASES = {
-
-        #
-        # North America
-        #
-
-        "usa": "united states",
-
-        "us": "united states",
-
-        "united states of america": "united states",
-
-        "america": "united states",
-
-
-        #
-        # Latin America
-        #
-
-        "brasil": "brazil",
-
-        "méxico": "mexico",
-
-        "mexico": "mexico",
-
-        "república dominicana": (
-            "dominican republic"
-        ),
-
-        "dominican republic": (
-            "dominican republic"
-        ),
-
-
-        #
-        # Europe
-        #
-
-        "românia": "romania",
-
-        "rumania": "romania",
-
-
-        #
-        # Asia
-        #
-
-        "indonésia": "indonesia",
-
-        "대한민국": "south korea",
-
-        "korea": "south korea",
-
-        "republic of korea": "south korea",
-
-        "日本": "japan",
-
-        "中国": "china",
-
-
-        #
-        # Africa
-        #
-
-        "tanzania united republic": (
-            "tanzania"
-        ),
-
-    }
-
 
     def get_context(
         self,
@@ -134,7 +67,7 @@ class SearchContextProvider:
         #
         # Alias match
         #
-        alias = self.COUNTRY_ALIASES.get(
+        alias = COUNTRY_ALIASES.get(
             country_key
         )
 
