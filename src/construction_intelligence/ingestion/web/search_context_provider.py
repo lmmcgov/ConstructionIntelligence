@@ -14,7 +14,9 @@ Responsibilities:
 
 from __future__ import annotations
 
-import unicodedata
+from construction_intelligence.ingestion.web.country_normalization import (
+    normalize_country_name,
+)
 
 from construction_intelligence.ingestion.web.country_profiles import (
     COUNTRY_PROFILES,
@@ -115,7 +117,7 @@ class SearchContextProvider:
         3. English global fallback
         """
 
-        country_key = self._normalize(
+        country_key = normalize_country_name(
             country
         )
 
@@ -151,48 +153,3 @@ class SearchContextProvider:
         return COUNTRY_PROFILES[
             "united states"
         ]
-
-
-    def _normalize(
-        self,
-        value: str | None,
-    ) -> str:
-        """
-        Normalize country input.
-
-        Handles:
-
-        - None
-        - capitalization
-        - whitespace
-        - accents
-        """
-
-        if not value:
-
-            return ""
-
-
-        value = value.strip().lower()
-
-
-        #
-        # Normalize accents.
-        #
-        value = (
-            unicodedata
-            .normalize(
-                "NFKD",
-                value,
-            )
-            .encode(
-                "ascii",
-                "ignore",
-            )
-            .decode(
-                "ascii",
-            )
-        )
-
-
-        return value
