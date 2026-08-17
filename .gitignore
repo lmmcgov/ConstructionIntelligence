@@ -37,6 +37,20 @@ htmlcov/
 .ruff_cache/
 
 # =====================================
+# Feed discovery cache
+# =====================================
+
+data/feed_cache/
+
+# =====================================
+# Local databases and raw data fixtures
+# Generated/downloaded locally, not source.
+# =====================================
+
+*.db
+data/raw/
+
+# =====================================
 # Jupyter
 # =====================================
 
