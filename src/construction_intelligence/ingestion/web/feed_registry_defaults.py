@@ -9,14 +9,28 @@ Asia, Europe & Central Asia, Africa).
 
 Coverage as of 2026-08-17:
 
-- 19 of 32 requested countries yielded at least one verified,
-  live feed or sitemap.
-- 13 yielded zero despite real research attempts. Most of those
-  failures were network/bot-blocking errors (403/404/500/
-  connection refused/TLS errors) against government domains,
-  not confirmed absence of a feed -- worth a periodic recheck
-  rather than treated as permanently settled. See the comment
-  block at the end of each region function for what was tried.
+- All 32 requested countries have at least one verified, live
+  feed or sitemap. 19 were found in the first research pass; the
+  remaining 13 (Chile, Peru, Honduras, Nicaragua, Panama,
+  Indonesia, Pakistan, Philippines, Cambodia, Albania, Serbia,
+  Nigeria, Morocco) required a second, more targeted pass after
+  their first-attempt candidates failed on bot-blocking, wrong
+  domains, or stale/abandoned content -- see the inline comment
+  on each entry for specifics.
+- About a third of entries are "news" category fallbacks (a
+  national news outlet or wire service) rather than a government/
+  procurement source, used only where every government-domain
+  candidate was unreachable or feedless after real attempts.
+  These carry a lower source_priority weight than government/
+  procurement feeds by design (see search_context.py), and one
+  (Nicaragua's) carries an explicit editorial-bias caveat --
+  worth weighing that when interpreting results from those
+  countries specifically.
+- Several "government"-category entries are general national
+  government feeds/sitemaps rather than infrastructure-specific
+  ministry ones, used where the relevant ministry had no working
+  feed. Discovery casts a broad net by design; ranking and scoring
+  filter for relevance downstream.
 
 Feeds here were not filtered for construction relevance beyond
 what their category implies -- discovery intentionally casts a
@@ -143,17 +157,41 @@ def _register_south_america(registry: FeedRegistry) -> None:
         ],
     )
 
-    #
-    # Chile, Peru: researched, 0 verified feeds.
-    #
-    # Chile -- mercadopublico.cl RSS exists but is abandoned
-    # (most recent item dated 2017); mop.cl/feed/ has an expired
-    # TLS certificate.
-    #
-    # Peru -- gob.pe (incl. OSCE/MTC pages) returns HTTP 418 to
-    # automated fetches (bot-blocked, not confirmed feedless);
-    # mtc.gob.pe/feed/ unresponsive.
-    #
+    registry.register(
+        "chile",
+        [
+            FeedSource(
+                url="https://www.mop.gob.cl/feed/",
+                category="government",
+                kind="rss",
+            ),
+            #
+            # Ministerio de Obras Publicas. Correct domain is
+            # mop.gob.cl, not mop.cl (which just redirects here) --
+            # the redirect was the reason an earlier pass missed it.
+            # Directly construction-relevant: verified top item was
+            # a road-concession bid announcement.
+            #
+        ],
+    )
+
+    registry.register(
+        "peru",
+        [
+            FeedSource(
+                url="https://andina.pe/agencia/rss.aspx",
+                category="news",
+                kind="rss",
+            ),
+            #
+            # News fallback -- Agencia Peruana de Noticias Andina,
+            # Peru's state-owned news wire (state-owned but not a
+            # ministry press office, hence "news" not "government").
+            # gob.pe (incl. OSCE/MTC) remains bot-blocked (HTTP 418)
+            # on every path tried.
+            #
+        ],
+    )
 
 
 def _register_central_america_and_caribbean(registry: FeedRegistry) -> None:
@@ -234,13 +272,63 @@ def _register_central_america_and_caribbean(registry: FeedRegistry) -> None:
         ],
     )
 
-    #
-    # Honduras, Nicaragua, Panama: researched, 0 verified feeds.
-    # Ministry/procurement domains failed at the network level
-    # (404/ECONNREFUSED/ECONNRESET) far more often than they
-    # simply lacked a feed -- worth a re-check from an unblocked
-    # network path before concluding these have no viable source.
-    #
+    registry.register(
+        "honduras",
+        [
+            FeedSource(
+                url="https://oncae.gob.hn/feed/",
+                category="procurement",
+                kind="rss",
+            ),
+            #
+            # ONCAE (Oficina Normativa de Contratacion y
+            # Adquisiciones del Estado) -- Honduras' national
+            # procurement office. Verified top item was a
+            # procurement circular. Use the no-www canonical form;
+            # www.oncae.gob.hn redirects here.
+            #
+        ],
+    )
+
+    registry.register(
+        "nicaragua",
+        [
+            FeedSource(
+                url="https://www.confidencial.digital/feed/",
+                category="news",
+                kind="rss",
+            ),
+            #
+            # CAVEAT: independent Nicaraguan outlet operating in
+            # exile, editorially opposition-aligned -- not a
+            # neutral source, but the only Nicaraguan source that
+            # resolved at all. Every government domain tried
+            # (mti.gob.ni times out at TCP; presidencia.gob.ni has
+            # broken DNS) and most other independent outlets are
+            # Cloudflare-blocked -- Nicaragua's web presence is
+            # broadly unreachable from this environment, not simply
+            # feedless.
+            #
+        ],
+    )
+
+    registry.register(
+        "panama",
+        [
+            FeedSource(
+                url="https://www.mef.gob.pa/feed/",
+                category="government",
+                kind="rss",
+            ),
+            #
+            # Ministerio de Economia y Finanzas -- oversees
+            # PanamaCompra procurement; verified content includes
+            # housing-policy items. mop.gob.pa (the actual Ministry
+            # of Public Works) remains connection-refused on every
+            # protocol/subdomain combination tried.
+            #
+        ],
+    )
 
 
 def _register_europe_and_central_asia(registry: FeedRegistry) -> None:
@@ -359,18 +447,42 @@ def _register_europe_and_central_asia(registry: FeedRegistry) -> None:
         ],
     )
 
-    #
-    # Albania, Cambodia, Serbia, North Macedonia's RSS path (kept
-    # only via sitemap above): researched, 0 additional verified
-    # feeds beyond what's listed. Albania's infrastruktura.gov.al
-    # sitemap is confirmed stale (newest lastmod 2020-12-10) --
-    # excluded as abandoned. Cambodia's mpwt.gov.kh is unreachable
-    # (connection refused/timeout) from both the research
-    # environment and a direct curl re-check. Serbia's mgsi.gov.rs
-    # (Ministry of Construction, Transport and Infrastructure)
-    # returns 404 on standard feed/sitemap paths from both fetch
-    # paths tried.
-    #
+    registry.register(
+        "albania",
+        [
+            FeedSource(
+                url="https://www.arrsh.gov.al/feed",
+                category="government",
+                kind="rss",
+            ),
+            #
+            # Autoriteti Rrugor Shqiptar (Albanian Road Authority)
+            # -- directly construction-relevant, e.g. a verified
+            # item on Tirane-Durres highway widening work.
+            # infrastruktura.gov.al (the ministry itself) remains
+            # confirmed stale (newest sitemap lastmod 2020-12-10).
+            #
+        ],
+    )
+
+    registry.register(
+        "serbia",
+        [
+            FeedSource(
+                url="https://www.mgsi.gov.rs/lat/rss.xml",
+                category="government",
+                kind="rss",
+            ),
+            #
+            # Ministry of Construction, Transport and
+            # Infrastructure. Earlier 404s were on /feed and
+            # /sitemap.xml at domain root -- this ministry runs
+            # Drupal, not WordPress, so the feed lives at this
+            # non-standard path instead. A Cyrillic-script variant
+            # exists at the same path without /lat/.
+            #
+        ],
+    )
 
 
 def _register_asia_and_africa(registry: FeedRegistry) -> None:
@@ -407,15 +519,111 @@ def _register_asia_and_africa(registry: FeedRegistry) -> None:
         ],
     )
 
-    #
-    # Nigeria, Morocco, Philippines, Indonesia, Pakistan:
-    # researched, 0 verified feeds. Several came back 403/500/
-    # connection-refused/timeout (pu.go.id, ppra.gov.pk, Morocco's
-    # equipement.gov.ma and transport.gov.ma) from both the
-    # sandboxed research pass and a direct curl re-check --
-    # persistent enough across two fetch paths to treat as a real
-    # access barrier, not just inconclusive. PhilGEPS (Philippines)
-    # has no discoverable feed or sitemap at all -- third-party
-    # scraping is the only current access path, which this design
-    # deliberately excludes rather than substitute.
-    #
+    registry.register(
+        "nigeria",
+        [
+            FeedSource(
+                url="https://ferma.gov.ng/feed/",
+                category="government",
+                kind="rss",
+            ),
+            #
+            # Federal Roads Maintenance Agency -- directly
+            # construction/procurement relevant, e.g. verified
+            # items on a road maintenance programme and a tender
+            # invitation. fmw.gov.ng (the ministry itself) also has
+            # a sitemap but its lastmod dates max out at 2024-02 --
+            # excluded as abandoned.
+            #
+        ],
+    )
+
+    registry.register(
+        "morocco",
+        [
+            FeedSource(
+                url="https://www.maroc.ma/fr/rss.xml",
+                category="government",
+                kind="rss",
+            ),
+            #
+            # Official government portal -- general national news,
+            # not infrastructure-specific, but a real official
+            # source (same tier as Moldova/Montenegro's general
+            # government feeds above). equipement.gov.ma and
+            # transport.gov.ma remain persistently unreachable
+            # across three separate fetch attempts.
+            #
+        ],
+    )
+
+    registry.register(
+        "philippines",
+        [
+            FeedSource(
+                url="https://www.philstar.com/rss/business",
+                category="news",
+                kind="rss",
+            ),
+            #
+            # News fallback -- DPWH (dpwh.gov.ph) is behind
+            # Incapsula bot protection on both /feed and
+            # /sitemap.xml; PhilGEPS has no feed or sitemap at any
+            # standard path.
+            #
+        ],
+    )
+
+    registry.register(
+        "indonesia",
+        [
+            FeedSource(
+                url="https://www.antaranews.com/rss/ekonomi.xml",
+                category="news",
+                kind="rss",
+            ),
+            #
+            # News fallback -- pu.go.id blocked (403) on every
+            # path across two fetch attempts. binamarga.pu.go.id
+            # (roads directorate) has a live sitemap but ~500 of
+            # 501 entries are lastmod 2023, effectively abandoned.
+            # sda.pu.go.id returns HTML, not a real feed/sitemap.
+            #
+        ],
+    )
+
+    registry.register(
+        "pakistan",
+        [
+            FeedSource(
+                url="https://www.dawn.com/feeds/business",
+                category="news",
+                kind="rss",
+            ),
+            #
+            # News fallback -- no government/procurement source
+            # found despite checking federal PPRA (500/403) and
+            # three provincial procurement authorities (Punjab,
+            # KPK, Sindh -- 404/HTML-not-XML/timeout respectively).
+            #
+        ],
+    )
+
+    registry.register(
+        "cambodia",
+        [
+            FeedSource(
+                url="https://www.mlmupc.gov.kh/feed",
+                category="government",
+                kind="rss",
+            ),
+            #
+            # Ministry of Land Management, Urban Planning and
+            # Construction -- the correct ministry for this domain;
+            # verified titles reference district infrastructure and
+            # road planning. mpwt.gov.kh (Public Works and
+            # Transport) remains unreachable across every fetch
+            # path tried.
+            #
+        ],
+    )
