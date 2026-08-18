@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Construction Intelligence — Evidence Discovery</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #8b93a3;
+    --accent: #4f8cff;
+    --good: #3ecf8e;
+    --bad: #e5566d;
+    --warn: #e5b84b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 960px;
+    margin: 40px auto;
+    padding: 0 20px;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.subtitle { color: var(--muted); margin-top: 0; }
+
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(79, 140, 255, 0.06);
+    color: var(--text);
+  }
+  #dropzone input { display: none; }
+
+  #status-line {
+    margin: 14px 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  #status-line.error { color: var(--bad); }
+  #status-line.warn { color: var(--warn); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge.pending { background: #2a2f3a; color: var(--muted); }
+  .badge.running { background: rgba(79, 140, 255, 0.15); color: var(--accent); }
+  .badge.done { background: rgba(62, 207, 142, 0.15); color: var(--good); }
+  .badge.error { background: rgba(229, 86, 109, 0.15); color: var(--bad); }
+
+  .evidence-list { margin: 4px 0 0; padding-left: 16px; }
+  .evidence-list li { margin-bottom: 3px; }
+  .evidence-list a { color: var(--accent); text-decoration: none; }
+  .evidence-list a:hover { text-decoration: underline; }
+
+  .row-warning { color: var(--warn); font-size: 0.8rem; margin-top: 4px; }
+  .row-error { color: var(--bad); font-size: 0.8rem; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Construction Intelligence</h1>
+<p class="subtitle">Drop a GeoJSON file of construction objects to search for supporting evidence.</p>
+
+<div id="dropzone">
+  <div>Drag &amp; drop a GeoJSON file here, or click to browse</div>
+  <input type="file" id="file-input" accept=".geojson,.json,application/geo+json,application/json" />
+</div>
+
+<div id="status-line"></div>
+
+<table id="results-table" style="display:none">
+  <thead>
+    <tr>
+      <th style="width: 30%">Project</th>
+      <th style="width: 12%">Status</th>
+      <th style="width: 10%">Evidence</th>
+      <th>Sources found</th>
+    </tr>
+  </thead>
+  <tbody id="results-body"></tbody>
+</table>
+
+<script>
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("file-input");
+  const statusLine = document.getElementById("status-line");
+  const resultsTable = document.getElementById("results-table");
+  const resultsBody = document.getElementById("results-body");
+
+  let pollTimer = null;
+
+  dropzone.addEventListener("click", () => fileInput.click());
+
+  dropzone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+
+  dropzone.addEventListener("dragleave", () => {
+    dropzone.classList.remove("dragover");
+  });
+
+  dropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dropzone.classList.remove("dragover");
+    if (event.dataTransfer.files.length > 0) {
+      handleFile(event.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length > 0) {
+      handleFile(fileInput.files[0]);
+    }
+  });
+
+  function setStatus(message, kind) {
+    statusLine.textContent = message;
+    statusLine.className = kind ? kind : "";
+  }
+
+  function badge(status) {
+    return `<span class="badge ${status}">${status}</span>`;
+  }
+
+  async function handleFile(file) {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+
+    resultsTable.style.display = "none";
+    resultsBody.innerHTML = "";
+    setStatus(`Uploading ${file.name}...`);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    let response;
+    try {
+      response = await fetch("/upload", { method: "POST", body: formData });
+    } catch (error) {
+      setStatus(`Upload failed: ${error}`, "error");
+      return;
+    }
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setStatus(`Error: ${data.error || "upload failed"}`, "error");
+      return;
+    }
+
+    let statusMessage = `Processing ${data.feature_count} construction object(s)...`;
+    if (data.truncated) {
+      statusMessage += ` (file had more than ${data.feature_count} features -- truncated)`;
+    }
+    setStatus(statusMessage, data.truncated ? "warn" : "");
+
+    resultsTable.style.display = "";
+    pollJob(data.job_id);
+  }
+
+  function pollJob(jobId) {
+    pollTimer = setInterval(async () => {
+      const response = await fetch(`/jobs/${jobId}`);
+      const job = await response.json();
+
+      if (!response.ok) {
+        setStatus(`Error: ${job.error || "job lookup failed"}`, "error");
+        clearInterval(pollTimer);
+        return;
+      }
+
+      renderResults(job.results);
+
+      if (job.complete) {
+        clearInterval(pollTimer);
+        const total = job.results.reduce((sum, r) => sum + r.evidence_count, 0);
+        setStatus(`Done -- ${total} evidence item(s) found across ${job.results.length} project(s).`);
+      }
+    }, 2000);
+  }
+
+  function renderResults(results) {
+    resultsBody.innerHTML = results.map((r) => {
+      const sources = r.evidence.length
+        ? `<ul class="evidence-list">${r.evidence.map(e =>
+            `<li><a href="${e.url}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></li>`
+          ).join("")}</ul>`
+        : (r.status === "done" ? "<em>none found</em>" : "");
+
+      const notes = [
+        r.warning ? `<div class="row-warning">${escapeHtml(r.warning)}</div>` : "",
+        r.error ? `<div class="row-error">${escapeHtml(r.error)}</div>` : "",
+      ].join("");
+
+      return `
+        <tr>
+          <td>${escapeHtml(r.project_name)}${notes}</td>
+          <td>${badge(r.status)}</td>
+          <td>${r.evidence_count}</td>
+          <td>${sources}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.textContent = value == null ? "" : value;
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>

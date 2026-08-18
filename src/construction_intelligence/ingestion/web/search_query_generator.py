@@ -131,20 +131,25 @@ class SearchQueryGenerator:
         #
         # Government-specific construction searches.
         #
-        for project_term in search_terms[:8]:
+        # {state}.gov is a US state-domain convention -- only
+        # generate this query when a state is present.
+        #
+        if project.state:
 
-            self._add(
-                queries,
-                (
-                    f'"{project_term}" '
-                    f'construction '
-                    f'site:{project.state.lower()}'
-                    f'.gov'
-                ),
-                category="official",
-                priority=OFFICIAL_PRIORITY,
-                tier=OFFICIAL_TIER,
-            )
+            for project_term in search_terms[:8]:
+
+                self._add(
+                    queries,
+                    (
+                        f'"{project_term}" '
+                        f'construction '
+                        f'site:{project.state.lower()}'
+                        f'.gov'
+                    ),
+                    category="official",
+                    priority=OFFICIAL_PRIORITY,
+                    tier=OFFICIAL_TIER,
+                )
 
 
 

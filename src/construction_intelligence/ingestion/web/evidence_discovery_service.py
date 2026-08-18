@@ -196,11 +196,27 @@ class EvidenceDiscoveryService:
 
                 for query in tiers[tier]:
 
-                    results = (
-                        self.search_provider.search(
-                            query.query
+                    #
+                    # A single query failure (e.g. the search
+                    # provider is unreachable) should not discard
+                    # candidates already found -- by feeds, or by
+                    # earlier queries in this same loop.
+                    #
+                    try:
+
+                        results = (
+                            self.search_provider.search(
+                                query.query
+                            )
                         )
-                    )
+
+                    except Exception as error:
+
+                        print(
+                            f"Search query failed: {query.query} ({error})"
+                        )
+
+                        continue
 
 
                     urls.extend(

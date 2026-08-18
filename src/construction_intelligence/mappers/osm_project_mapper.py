@@ -8,6 +8,9 @@ from construction_intelligence.core.enums import (
     ProjectStatus,
 )
 from construction_intelligence.core.project import Project
+from construction_intelligence.core.project_category_mapping import (
+    CONSTRUCTION_TYPE_TO_CATEGORY,
+)
 from construction_intelligence.models.construction_project_candidate import (
     ConstructionProjectCandidate,
 )
@@ -22,20 +25,7 @@ class OSMProjectMapper:
     ) -> Project:
         """Convert a ConstructionProjectCandidate into a Project."""
 
-        category_map = {
-            "motorway": ProjectCategory.ROAD,
-            "trunk": ProjectCategory.ROAD,
-            "primary": ProjectCategory.ROAD,
-            "secondary": ProjectCategory.ROAD,
-            "tertiary": ProjectCategory.ROAD,
-            "residential": ProjectCategory.ROAD,
-            "service": ProjectCategory.ROAD,
-            "track": ProjectCategory.ROAD,
-            "bridge": ProjectCategory.BRIDGE,
-            "rail": ProjectCategory.RAIL,
-        }
-
-        category = category_map.get(
+        category = CONSTRUCTION_TYPE_TO_CATEGORY.get(
             candidate.construction_type,
             ProjectCategory.OTHER,
         )

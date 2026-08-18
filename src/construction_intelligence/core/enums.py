@@ -6,6 +6,7 @@ class ProjectOrigin(StrEnum):
 
     OSM = "osm"
     WEB = "web"
+    GEOJSON_UPLOAD = "geojson_upload"
 
 
 class ConfidenceLevel(StrEnum):
