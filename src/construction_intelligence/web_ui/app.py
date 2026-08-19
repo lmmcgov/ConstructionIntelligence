@@ -16,6 +16,13 @@ Requires a local SearXNG instance for the tiered-search fallback
 (see README.md) -- feed-based discovery works without it, but
 projects in countries with no registered feed will find nothing
 if SearXNG isn't running.
+
+SECURITY: this server has no authentication and is meant for
+local, single-user use only. It binds to 127.0.0.1 by default
+(uvicorn's own default) -- do not run it with --host 0.0.0.0, or
+otherwise expose this port, on a network with untrusted peers.
+Anyone who can reach the port can upload files and read all job
+results.
 """
 
 from __future__ import annotations
@@ -62,6 +69,13 @@ from construction_intelligence.web_ui.job_store import (
     ProjectJobStatus,
 )
 
+
+#
+# Rejects an upload before it's fully read into memory rather
+# than trusting a client-supplied Content-Length header (which
+# can lie) -- enforced by reading in bounded chunks.
+#
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 #
 # A feature triggers a full discovery run (feeds + tiered search
@@ -125,19 +139,79 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+async def _read_upload_bounded(
+    file: UploadFile,
+    max_bytes: int,
+) -> bytes:
+    """
+    Read an upload in chunks, aborting once max_bytes is
+    exceeded, instead of trusting Content-Length and reading
+    the whole body into memory unconditionally.
+    """
+
+    chunks: list[bytes] = []
+
+    total = 0
+
+    while True:
+
+        chunk = await file.read(65536)
+
+        if not chunk:
+
+            break
+
+        total += len(chunk)
+
+        if total > max_bytes:
+
+            raise ValueError(
+                f"Upload exceeds the {max_bytes} byte limit."
+            )
+
+        chunks.append(chunk)
+
+    return b"".join(chunks)
+
+
 @app.post("/upload")
 async def upload(file: UploadFile) -> JSONResponse:
 
-    raw = await file.read()
+    try:
 
+        raw = await _read_upload_bounded(
+            file,
+            MAX_UPLOAD_BYTES,
+        )
+
+    except ValueError as error:
+
+        return JSONResponse(
+            {"error": str(error)},
+            status_code=413,
+        )
+
+    #
+    # json.loads on untrusted input can raise more than just
+    # JSONDecodeError -- e.g. RecursionError on pathologically
+    # deep nesting. Catch broadly here so malformed input gets a
+    # clean 400 instead of an unhandled 500.
+    #
     try:
 
         data = json.loads(raw)
 
-    except json.JSONDecodeError:
+    except Exception:
 
         return JSONResponse(
             {"error": "Not valid JSON."},
+            status_code=400,
+        )
+
+    if not isinstance(data, dict):
+
+        return JSONResponse(
+            {"error": "Expected a GeoJSON FeatureCollection object."},
             status_code=400,
         )
 
@@ -154,10 +228,35 @@ async def upload(file: UploadFile) -> JSONResponse:
 
     features = features[:MAX_FEATURES_PER_UPLOAD]
 
-    projects = [
-        mapper.map(feature, index)
-        for index, feature in enumerate(features)
-    ]
+    #
+    # Skip (rather than crash on) any feature that isn't a
+    # well-formed dict -- one malformed feature shouldn't fail
+    # the whole upload.
+    #
+    projects: list[Project] = []
+
+    for index, feature in enumerate(features):
+
+        if not isinstance(feature, dict):
+
+            continue
+
+        try:
+
+            projects.append(
+                mapper.map(feature, index)
+            )
+
+        except Exception:
+
+            continue
+
+    if not projects:
+
+        return JSONResponse(
+            {"error": "No valid GeoJSON features found."},
+            status_code=400,
+        )
 
     job_id = str(uuid4())
 

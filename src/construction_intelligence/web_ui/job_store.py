@@ -76,9 +76,16 @@ class Job:
         )
 
 
+#
+# Repeated uploads would otherwise grow this dict forever --
+# oldest jobs are evicted once this many are retained.
+#
+MAX_RETAINED_JOBS = 50
+
+
 class JobStore:
     """
-    Thread-safe in-memory store of upload jobs.
+    Thread-safe, bounded, in-memory store of upload jobs.
 
     Written to from background worker threads and read from
     request-handling coroutines, so all access goes through a
@@ -88,6 +95,14 @@ class JobStore:
     def __init__(self) -> None:
 
         self._jobs: dict[str, Job] = {}
+
+        #
+        # Insertion order, for oldest-first eviction. dict
+        # preserves insertion order in Python, but a separate
+        # list keeps eviction O(1) instead of re-deriving order
+        # from dict iteration each time.
+        #
+        self._order: list[str] = []
 
         self._lock = Lock()
 
@@ -112,6 +127,14 @@ class JobStore:
         with self._lock:
 
             self._jobs[job_id] = job
+
+            self._order.append(job_id)
+
+            while len(self._order) > MAX_RETAINED_JOBS:
+
+                oldest_id = self._order.pop(0)
+
+                self._jobs.pop(oldest_id, None)
 
         return job
 

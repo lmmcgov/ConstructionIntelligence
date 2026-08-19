@@ -215,9 +215,12 @@
   function renderResults(results) {
     resultsBody.innerHTML = results.map((r) => {
       const sources = r.evidence.length
-        ? `<ul class="evidence-list">${r.evidence.map(e =>
-            `<li><a href="${e.url}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></li>`
-          ).join("")}</ul>`
+        ? `<ul class="evidence-list">${r.evidence.map(e => {
+            const href = safeHref(e.url);
+            return href
+              ? `<li><a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(e.title)}</a></li>`
+              : `<li>${escapeHtml(e.title)} <em>(unlinkable URL)</em></li>`;
+          }).join("")}</ul>`
         : (r.status === "done" ? "<em>none found</em>" : "");
 
       const notes = [
@@ -237,9 +240,35 @@
   }
 
   function escapeHtml(value) {
+    // Safe for HTML TEXT content only -- does not escape quote
+    // characters, so never use this for building attribute
+    // values (e.g. href="..."). Use safeHref() for those.
     const div = document.createElement("div");
     div.textContent = value == null ? "" : value;
     return div.innerHTML;
+  }
+
+  function safeHref(url) {
+    // Evidence URLs come from external search/feed results, not
+    // from anything we control -- reject non-http(s) schemes
+    // (blocks javascript: etc.) and attribute-escape quotes so
+    // the value can't break out of href="...".
+    if (typeof url !== "string") return null;
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (e) {
+      return null;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.href
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
   }
 </script>
 
