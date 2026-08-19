@@ -12,10 +12,13 @@ Run locally with:
 
     uv run uvicorn construction_intelligence.web_ui.app:app --reload
 
-Requires a local SearXNG instance for the tiered-search fallback
-(see README.md) -- feed-based discovery works without it, but
-projects in countries with no registered feed will find nothing
-if SearXNG isn't running.
+Search runs through both SearXNG (local, see README.md -- must
+be running separately) and Google News (hosted, needs nothing
+local but resolves each result via a headless browser, so it's
+slower per-query). Either can fail independently without losing
+the other's results, and feed-based discovery works without
+either -- projects in countries with no registered feed and both
+search backends unavailable will find nothing.
 
 AUTH: protected by Auth0 (see .env.example for one-time setup).
 The server refuses to start without AUTH0_DOMAIN, AUTH0_CLIENT_ID,
@@ -51,8 +54,14 @@ from construction_intelligence.ingestion.web.feed_registry_defaults import (
 from construction_intelligence.ingestion.web.gemini_extractor import (
     GeminiExtractor,
 )
+from construction_intelligence.ingestion.web.google_news_search_provider import (
+    GoogleNewsSearchProvider,
+)
 from construction_intelligence.ingestion.web.html_extractor import (
     HTMLExtractor,
+)
+from construction_intelligence.ingestion.web.multi_search_provider import (
+    MultiSearchProvider,
 )
 from construction_intelligence.ingestion.web.searxng_search_provider import (
     SearXNGSearchProvider,
@@ -133,12 +142,21 @@ mapper = GeoJSONProjectMapper()
 # Built once at import time and reused across worker threads.
 # EvidenceDiscoveryService and its feed/search providers don't
 # mutate shared state during a run (feed dedup goes through
-# diskcache, which is safe for this bounded level of concurrency),
-# so there's no need to rebuild this per project.
+# diskcache, which is safe for this bounded level of concurrency;
+# GoogleNewsSearchProvider's shared browser is protected by its
+# own internal lock), so there's no need to rebuild this per
+# project.
 #
+google_news_search_provider = GoogleNewsSearchProvider()
+
 ingestion_service = WebEvidenceIngestionService(
     discovery_service=EvidenceDiscoveryService(
-        search_provider=SearXNGSearchProvider(),
+        search_provider=MultiSearchProvider(
+            [
+                SearXNGSearchProvider(),
+                google_news_search_provider,
+            ]
+        ),
         feed_registry=build_default_feed_registry(),
     ),
     #
@@ -154,6 +172,17 @@ ingestion_service = WebEvidenceIngestionService(
         ),
     ),
 )
+
+
+@app.on_event("shutdown")
+def _close_google_news_browser() -> None:
+    """
+    Not required for the process to exit -- avoids leaving a
+    Chromium process running past server shutdown during local
+    dev.
+    """
+
+    google_news_search_provider.close()
 
 
 @app.get("/")

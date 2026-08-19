@@ -206,7 +206,8 @@ class EvidenceDiscoveryService:
 
                         results = (
                             self.search_provider.search(
-                                query.query
+                                query.query,
+                                country=context.country,
                             )
                         )
 

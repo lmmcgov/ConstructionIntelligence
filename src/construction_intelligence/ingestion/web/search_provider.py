@@ -16,6 +16,7 @@ class SearchProvider(ABC):
     def search(
         self,
         query: str,
+        country: str | None = None,
     ) -> list[str]:
         """
         Search the web and return URLs.
@@ -24,6 +25,13 @@ class SearchProvider(ABC):
         ----------
         query:
             Search query string.
+
+        country:
+            Canonical country name (as resolved by
+            SearchContextProvider), if known. Optional --
+            providers that don't localize by country (e.g.
+            SearXNG) can ignore it; providers that do (e.g.
+            Google News) use it to scope results.
 
         Returns
         -------

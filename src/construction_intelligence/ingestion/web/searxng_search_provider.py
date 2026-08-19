@@ -36,9 +36,15 @@ class SearXNGSearchProvider(
     def search(
         self,
         query: str,
+        country: str | None = None,
     ) -> list[str]:
         """
         Execute search and return result URLs.
+
+        country is accepted for SearchProvider interface
+        compatibility but unused -- SearXNG doesn't localize by
+        country, localization already happens upstream via the
+        query text itself (SearchQueryGenerator).
 
         SearXNG defaults to roughly 10 results.
         We paginate to build a larger candidate pool.
