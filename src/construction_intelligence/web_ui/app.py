@@ -17,12 +17,13 @@ Requires a local SearXNG instance for the tiered-search fallback
 projects in countries with no registered feed will find nothing
 if SearXNG isn't running.
 
-SECURITY: this server has no authentication and is meant for
-local, single-user use only. It binds to 127.0.0.1 by default
-(uvicorn's own default) -- do not run it with --host 0.0.0.0, or
-otherwise expose this port, on a network with untrusted peers.
-Anyone who can reach the port can upload files and read all job
-results.
+AUTH: protected by Auth0 (see .env.example for one-time setup).
+The server refuses to start without AUTH0_DOMAIN, AUTH0_CLIENT_ID,
+AUTH0_CLIENT_SECRET, and SESSION_SECRET_KEY set. Page routes
+redirect to /login when unauthenticated; the JSON API routes
+(/upload, /jobs/{job_id}) return 401 instead, since a fetch()
+call following a redirect to an HTML login page would otherwise
+fail confusingly on the frontend.
 """
 
 from __future__ import annotations
@@ -30,11 +31,12 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import urlencode
 from uuid import uuid4
 
-from fastapi import FastAPI, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from construction_intelligence.core.project import Project
 from construction_intelligence.ingestion.web.evidence_discovery_service import (
@@ -69,6 +71,20 @@ from construction_intelligence.web_ui.job_store import (
     ProjectJobStatus,
 )
 
+from construction_intelligence.web_ui import auth
+
+
+#
+# auth.py loads .env and reads AUTH0_*/SESSION_* env vars at its
+# own import time (see auth.py), so by the time this line runs
+# they're already resolved -- this just fails fast if anything
+# required is still missing, rather than starting the server in
+# a half-configured state.
+#
+auth.require_auth_config()
+
+auth.configure_oauth()
+
 
 #
 # Rejects an upload before it's fully read into memory rather
@@ -96,6 +112,13 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(
     title="Construction Intelligence -- GeoJSON Evidence Discovery"
+)
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=auth.SESSION_SECRET_KEY,
+    same_site="lax",
+    https_only=auth.SESSION_COOKIE_HTTPS_ONLY,
 )
 
 job_store = JobStore()
@@ -134,9 +157,85 @@ ingestion_service = WebEvidenceIngestionService(
 
 
 @app.get("/")
-def index() -> FileResponse:
+def index(request: Request):
+
+    if auth.get_session_user(request) is None:
+
+        return RedirectResponse(url="/login")
 
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/login")
+async def login(request: Request):
+
+    redirect_uri = f"{auth.APP_BASE_URL}/callback"
+
+    return await auth.oauth.auth0.authorize_redirect(
+        request,
+        redirect_uri,
+    )
+
+
+@app.get("/callback")
+async def callback(request: Request):
+
+    token = await auth.oauth.auth0.authorize_access_token(
+        request
+    )
+
+    userinfo = token.get("userinfo") or {}
+
+    #
+    # Store only what the UI needs to display -- this ends up in
+    # a signed (not encrypted) cookie, so nothing more sensitive
+    # than basic profile info belongs here.
+    #
+    request.session["user"] = {
+        "sub": userinfo.get("sub"),
+        "email": userinfo.get("email"),
+        "name": userinfo.get("name"),
+    }
+
+    return RedirectResponse(url="/")
+
+
+@app.get("/logout")
+def logout(request: Request):
+
+    request.session.clear()
+
+    logout_params = urlencode(
+        {
+            "client_id": auth.AUTH0_CLIENT_ID,
+            "returnTo": f"{auth.APP_BASE_URL}/",
+        }
+    )
+
+    return RedirectResponse(
+        url=(
+            f"https://{auth.AUTH0_DOMAIN}/v2/logout"
+            f"?{logout_params}"
+        )
+    )
+
+
+@app.get("/me")
+def me(request: Request) -> JSONResponse:
+
+    user = auth.get_session_user(request)
+
+    if user is None:
+
+        return JSONResponse({"authenticated": False})
+
+    return JSONResponse(
+        {
+            "authenticated": True,
+            "email": user.get("email"),
+            "name": user.get("name"),
+        }
+    )
 
 
 async def _read_upload_bounded(
@@ -175,7 +274,17 @@ async def _read_upload_bounded(
 
 
 @app.post("/upload")
-async def upload(file: UploadFile) -> JSONResponse:
+async def upload(
+    request: Request,
+    file: UploadFile,
+) -> JSONResponse:
+
+    if auth.get_session_user(request) is None:
+
+        return JSONResponse(
+            {"error": "Not authenticated."},
+            status_code=401,
+        )
 
     try:
 
@@ -339,7 +448,17 @@ def _process_project(
 
 
 @app.get("/jobs/{job_id}")
-def get_job(job_id: str) -> JSONResponse:
+def get_job(
+    job_id: str,
+    request: Request,
+) -> JSONResponse:
+
+    if auth.get_session_user(request) is None:
+
+        return JSONResponse(
+            {"error": "Not authenticated."},
+            status_code=401,
+        )
 
     job = job_store.get(job_id)
 
@@ -368,10 +487,3 @@ def get_job(job_id: str) -> JSONResponse:
             ],
         }
     )
-
-
-app.mount(
-    "/static",
-    StaticFiles(directory=STATIC_DIR),
-    name="static",
-)

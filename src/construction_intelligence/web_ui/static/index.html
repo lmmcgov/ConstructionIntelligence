@@ -84,9 +84,23 @@
 
   .row-warning { color: var(--warn); font-size: 0.8rem; margin-top: 4px; }
   .row-error { color: var(--bad); font-size: 0.8rem; margin-top: 4px; }
+
+  #user-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  #user-bar a { color: var(--accent); text-decoration: none; }
+  #user-bar a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
+
+<div id="user-bar"></div>
 
 <h1>Construction Intelligence</h1>
 <p class="subtitle">Drop a GeoJSON file of construction objects to search for supporting evidence.</p>
@@ -118,6 +132,24 @@
   const resultsBody = document.getElementById("results-body");
 
   let pollTimer = null;
+
+  loadUserBar();
+
+  async function loadUserBar() {
+    const userBar = document.getElementById("user-bar");
+    const response = await fetch("/me");
+    const me = await response.json();
+    if (me.authenticated) {
+      userBar.innerHTML =
+        `${escapeHtml(me.email || me.name || "Signed in")} &middot; <a href="/logout">Log out</a>`;
+    } else {
+      userBar.innerHTML = `<a href="/login">Log in</a>`;
+    }
+  }
+
+  function redirectToLogin() {
+    window.location.href = "/login";
+  }
 
   dropzone.addEventListener("click", () => fileInput.click());
 
@@ -174,6 +206,11 @@
       return;
     }
 
+    if (response.status === 401) {
+      redirectToLogin();
+      return;
+    }
+
     const data = await response.json();
 
     if (!response.ok) {
@@ -194,6 +231,13 @@
   function pollJob(jobId) {
     pollTimer = setInterval(async () => {
       const response = await fetch(`/jobs/${jobId}`);
+
+      if (response.status === 401) {
+        clearInterval(pollTimer);
+        redirectToLogin();
+        return;
+      }
+
       const job = await response.json();
 
       if (!response.ok) {
