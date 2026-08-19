@@ -10,7 +10,7 @@ Uses:
 - SearchQueryGenerator
 - Tiered search execution
 - Search provider integration
-- Feed-based discovery (RSS, sitemaps)
+- Feed-based discovery (RSS, sitemaps, World Bank procurement)
 - Candidate pool expansion before ranking
 """
 
@@ -47,6 +47,10 @@ from construction_intelligence.ingestion.web.search_query_generator import (
 
 from construction_intelligence.ingestion.web.sitemap_feed_provider import (
     SitemapFeedProvider,
+)
+
+from construction_intelligence.ingestion.web.worldbank_procurement_provider import (
+    WorldBankProcurementProvider,
 )
 
 
@@ -334,6 +338,12 @@ class EvidenceDiscoveryService:
             if source.kind == "sitemap"
         ]
 
+        worldbank_sources = [
+            source
+            for source in feed_sources
+            if source.kind == "worldbank_api"
+        ]
+
 
         providers: list[FeedProvider] = []
 
@@ -347,6 +357,14 @@ class EvidenceDiscoveryService:
 
             providers.append(
                 SitemapFeedProvider(sitemap_sources)
+            )
+
+        if worldbank_sources:
+
+            providers.append(
+                WorldBankProcurementProvider(
+                    worldbank_sources
+                )
             )
 
         if not providers:
